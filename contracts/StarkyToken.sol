@@ -1,13 +1,302 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity 0.6.12;
 
 import "./libs/BEP20.sol";
 
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+
 // StarkyToken with Governance.
-contract StarkyToken is BEP20('StarkySwap Token', 'STARKY') {
+contract StarkyToken is BEP20 {
+    // Transfer tax rate in basis points. (default 10%)
+    uint16 public transferTaxRate = 1000;
+    // Burn rate % of transfer tax. (default 50% x 10% = 5% of total amount).
+    uint16 public burnRate = 50;
+    // Max transfer tax rate: 20%.
+    uint16 public constant MAXIMUM_TRANSFER_TAX_RATE = 2000;
+    // Burn address
+    address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+
+    // Max transfer amount rate in basis points. (default is 0.5% of total supply)
+    uint16 public maxTransferAmountRate = 50;
+    // Addresses that excluded from antiWhale
+    mapping(address => bool) private _excludedFromAntiWhale;
+    // Automatic swap and liquify enabled
+    bool public swapAndLiquifyEnabled = false;
+    // Min amount to liquify. (default 500 STARKYs)
+    uint256 public minAmountToLiquify = 500 ether;
+    // The swap router, modifiable. Will be changed to StarkySwap's router when our own AMM release
+    IUniswapV2Router02 public starkySwapRouter;
+    // The trading pair
+    address public starkySwapPair;
+    // In swap and liquify
+    bool private _inSwapAndLiquify;
+
+    // The operator can only update the transfer tax rate
+    address private _operator;
+
+    // Events
+    event OperatorTransferred(address indexed previousOperator, address indexed newOperator);
+    event TransferTaxRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
+    event BurnRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
+    event MaxTransferAmountRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
+    event SwapAndLiquifyEnabledUpdated(address indexed operator, bool enabled);
+    event MinAmountToLiquifyUpdated(address indexed operator, uint256 previousAmount, uint256 newAmount);
+    event StarkySwapRouterUpdated(address indexed operator, address indexed router, address indexed pair);
+    event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
+
+    modifier onlyOperator() {
+        require(_operator == msg.sender, "operator: caller is not the operator");
+        _;
+    }
+
+    modifier antiWhale(address sender, address recipient, uint256 amount) {
+        if (maxTransferAmount() > 0) {
+            if (
+                _excludedFromAntiWhale[sender] == false
+                && _excludedFromAntiWhale[recipient] == false
+            ) {
+                require(amount <= maxTransferAmount(), "STARKY::antiWhale: Transfer amount exceeds the maxTransferAmount");
+            }
+        }
+        _;
+    }
+
+    modifier lockTheSwap {
+        _inSwapAndLiquify = true;
+        _;
+        _inSwapAndLiquify = false;
+    }
+
+    modifier transferTaxFree {
+        uint16 _transferTaxRate = transferTaxRate;
+        transferTaxRate = 0;
+        _;
+        transferTaxRate = _transferTaxRate;
+    }
+
+    /**
+     * @notice Constructs the StarkyToken contract.
+     */
+    constructor() public BEP20("Starky Swap", "STARKY") {
+        _operator = _msgSender();
+        emit OperatorTransferred(address(0), _operator);
+
+        _excludedFromAntiWhale[msg.sender] = true;
+        _excludedFromAntiWhale[address(0)] = true;
+        _excludedFromAntiWhale[address(this)] = true;
+        _excludedFromAntiWhale[BURN_ADDRESS] = true;
+    }
+
     /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
     function mint(address _to, uint256 _amount) public onlyOwner {
         _mint(_to, _amount);
         _moveDelegates(address(0), _delegates[_to], _amount);
+    }
+
+    /// @dev overrides transfer function to meet tokenomics of STARKY
+    function _transfer(address sender, address recipient, uint256 amount) internal virtual override antiWhale(sender, recipient, amount) {
+        // swap and liquify
+        if (
+            swapAndLiquifyEnabled == true
+            && _inSwapAndLiquify == false
+            && address(starkySwapRouter) != address(0)
+            && starkySwapPair != address(0)
+            && sender != starkySwapPair
+            && sender != owner()
+        ) {
+            swapAndLiquify();
+        }
+
+        if (recipient == BURN_ADDRESS || transferTaxRate == 0) {
+            super._transfer(sender, recipient, amount);
+        } else {
+            // default tax is 5% of every transfer
+            uint256 taxAmount = amount.mul(transferTaxRate).div(10000);
+            uint256 burnAmount = taxAmount.mul(burnRate).div(100);
+            uint256 liquidityAmount = taxAmount.sub(burnAmount);
+            require(taxAmount == burnAmount + liquidityAmount, "STARKY::transfer: Burn value invalid");
+
+            // default 95% of transfer sent to recipient
+            uint256 sendAmount = amount.sub(taxAmount);
+            require(amount == sendAmount + taxAmount, "STARKY::transfer: Tax value invalid");
+
+            super._transfer(sender, BURN_ADDRESS, burnAmount);
+            super._transfer(sender, address(this), liquidityAmount);
+            super._transfer(sender, recipient, sendAmount);
+            amount = sendAmount;
+        }
+    }
+
+    /// @dev Swap and liquify
+    function swapAndLiquify() private lockTheSwap transferTaxFree {
+        uint256 contractTokenBalance = balanceOf(address(this));
+        uint256 maxTransferAmount = maxTransferAmount();
+        contractTokenBalance = contractTokenBalance > maxTransferAmount ? maxTransferAmount : contractTokenBalance;
+
+        if (contractTokenBalance >= minAmountToLiquify) {
+            // only min amount to liquify
+            uint256 liquifyAmount = minAmountToLiquify;
+
+            // split the liquify amount into halves
+            uint256 half = liquifyAmount.div(2);
+            uint256 otherHalf = liquifyAmount.sub(half);
+
+            // capture the contract's current ETH balance.
+            // this is so that we can capture exactly the amount of ETH that the
+            // swap creates, and not make the liquidity event include any ETH that
+            // has been manually sent to the contract
+            uint256 initialBalance = address(this).balance;
+
+            // swap tokens for ETH
+            swapTokensForEth(half);
+
+            // how much ETH did we just swap into?
+            uint256 newBalance = address(this).balance.sub(initialBalance);
+
+            // add liquidity
+            addLiquidity(otherHalf, newBalance);
+
+            emit SwapAndLiquify(half, newBalance, otherHalf);
+        }
+    }
+
+    /// @dev Swap tokens for eth
+    function swapTokensForEth(uint256 tokenAmount) private {
+        // generate the starkySwap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = starkySwapRouter.WETH();
+
+        _approve(address(this), address(starkySwapRouter), tokenAmount);
+
+        // make the swap
+        starkySwapRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, // accept any amount of ETH
+            path,
+            address(this),
+            block.timestamp
+        );
+    }
+
+    /// @dev Add liquidity
+    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
+        // approve token transfer to cover all possible scenarios
+        _approve(address(this), address(starkySwapRouter), tokenAmount);
+
+        // add the liquidity
+        starkySwapRouter.addLiquidityETH{value: ethAmount}(
+            address(this),
+            tokenAmount,
+            0, // slippage is unavoidable
+            0, // slippage is unavoidable
+            operator(),
+            block.timestamp
+        );
+    }
+
+    /**
+     * @dev Returns the max transfer amount.
+     */
+    function maxTransferAmount() public view returns (uint256) {
+        return totalSupply().mul(maxTransferAmountRate).div(10000);
+    }
+
+    /**
+     * @dev Returns the address is excluded from antiWhale or not.
+     */
+    function isExcludedFromAntiWhale(address _account) public view returns (bool) {
+        return _excludedFromAntiWhale[_account];
+    }
+
+    // To receive BNB from starkySwapRouter when swapping
+    receive() external payable {}
+
+    /**
+     * @dev Update the transfer tax rate.
+     * Can only be called by the current operator.
+     */
+    function updateTransferTaxRate(uint16 _transferTaxRate) public onlyOperator {
+        require(_transferTaxRate <= MAXIMUM_TRANSFER_TAX_RATE, "STARKY::updateTransferTaxRate: Transfer tax rate must not exceed the maximum rate.");
+        emit TransferTaxRateUpdated(msg.sender, transferTaxRate, _transferTaxRate);
+        transferTaxRate = _transferTaxRate;
+    }
+
+    /**
+     * @dev Update the burn rate.
+     * Can only be called by the current operator.
+     */
+    function updateBurnRate(uint16 _burnRate) public onlyOperator {
+        require(_burnRate <= 100, "STARKY::updateBurnRate: Burn rate must not exceed the maximum rate.");
+        emit BurnRateUpdated(msg.sender, burnRate, _burnRate);
+        burnRate = _burnRate;
+    }
+
+    /**
+     * @dev Update the max transfer amount rate.
+     * Can only be called by the current operator.
+     */
+    function updateMaxTransferAmountRate(uint16 _maxTransferAmountRate) public onlyOperator {
+        require(_maxTransferAmountRate <= 10000, "STARKY::updateMaxTransferAmountRate: Max transfer amount rate must not exceed the maximum rate.");
+        emit MaxTransferAmountRateUpdated(msg.sender, maxTransferAmountRate, _maxTransferAmountRate);
+        maxTransferAmountRate = _maxTransferAmountRate;
+    }
+
+    /**
+     * @dev Update the min amount to liquify.
+     * Can only be called by the current operator.
+     */
+    function updateMinAmountToLiquify(uint256 _minAmount) public onlyOperator {
+        emit MinAmountToLiquifyUpdated(msg.sender, minAmountToLiquify, _minAmount);
+        minAmountToLiquify = _minAmount;
+    }
+
+    /**
+     * @dev Exclude or include an address from antiWhale.
+     * Can only be called by the current operator.
+     */
+    function setExcludedFromAntiWhale(address _account, bool _excluded) public onlyOperator {
+        _excludedFromAntiWhale[_account] = _excluded;
+    }
+
+    /**
+     * @dev Update the swapAndLiquifyEnabled.
+     * Can only be called by the current operator.
+     */
+    function updateSwapAndLiquifyEnabled(bool _enabled) public onlyOperator {
+        emit SwapAndLiquifyEnabledUpdated(msg.sender, _enabled);
+        swapAndLiquifyEnabled = _enabled;
+    }
+
+    /**
+     * @dev Update the swap router.
+     * Can only be called by the current operator.
+     */
+    function updateStarkySwapRouter(address _router) public onlyOperator {
+        starkySwapRouter = IUniswapV2Router02(_router);
+        starkySwapPair = IUniswapV2Factory(starkySwapRouter.factory()).getPair(address(this), starkySwapRouter.WETH());
+        require(starkySwapPair != address(0), "STARKY::updateStarkySwapRouter: Invalid pair address.");
+        emit StarkySwapRouterUpdated(msg.sender, address(starkySwapRouter), starkySwapPair);
+    }
+
+    /**
+     * @dev Returns the address of the current operator.
+     */
+    function operator() public view returns (address) {
+        return _operator;
+    }
+
+    /**
+     * @dev Transfers operator of the contract to a new account (`newOperator`).
+     * Can only be called by the current operator.
+     */
+    function transferOperator(address newOperator) public onlyOperator {
+        require(newOperator != address(0), "STARKY::transferOperator: new operator is the zero address");
+        emit OperatorTransferred(_operator, newOperator);
+        _operator = newOperator;
     }
 
     // Copied and modified from YAM code:
@@ -16,7 +305,7 @@ contract StarkyToken is BEP20('StarkySwap Token', 'STARKY') {
     // Which is copied and modified from COMPOUND:
     // https://github.com/compound-finance/compound-protocol/blob/master/contracts/Governance/Comp.sol
 
-    /// @notice A record of each accounts delegate
+    /// @dev A record of each accounts delegate
     mapping (address => address) internal _delegates;
 
     /// @notice A checkpoint for marking number of votes from a given block

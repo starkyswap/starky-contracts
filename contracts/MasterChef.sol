@@ -5,6 +5,7 @@ pragma solidity 0.6.12;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./libs/IBEP20.sol";
 import "./libs/SafeBEP20.sol";
+import "./libs/IStarkyReferral.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -23,8 +24,10 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     // Info of each user.
     struct UserInfo {
-        uint256 amount;         // How many LP tokens the user has provided.
-        uint256 rewardDebt;     // Reward debt. See explanation below.
+        uint256 amount; // How many LP tokens the user has provided.
+        uint256 rewardDebt; // Reward debt. See explanation below.
+        uint256 rewardLockedUp; // Reward locked up.
+        uint256 nextHarvestUntil; // When can the user harvest again.
         //
         // We do some fancy math here. Basically, any point in time, the amount of STARKYs
         // entitled to a user but is pending to be distributed is:
@@ -40,110 +43,200 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     // Info of each pool.
     struct PoolInfo {
-        IBEP20 lpToken;           // Address of LP token contract.
-        uint256 allocPoint;       // How many allocation points assigned to this pool. STARKYs to distribute per block.
-        uint256 lastRewardBlock;  // Last block number that STARKYs distribution occurs.
-        uint256 accStarkyPerShare;   // Accumulated STARKYs per share, times 1e12. See below.
-        uint16 depositFeeBP;      // Deposit fee in basis points
+        IBEP20 lpToken; // Address of LP token contract.
+        uint256 allocPoint; // How many allocation points assigned to this pool. STARKYs to distribute per block.
+        uint256 lastRewardBlock; // Last block number that STARKYs distribution occurs.
+        uint256 accStarkyPerShare; // Accumulated STARKYs per share, times 1e12. See below.
+        uint16 depositFeeBP; // Deposit fee in basis points
+        uint256 harvestInterval; // Harvest interval in seconds
     }
 
     // The STARKY TOKEN!
     StarkyToken public starky;
     // Dev address.
-    address public devaddr;
+    address public devAddress;
+    // Deposit Fee address
+    address public feeAddress;
     // STARKY tokens created per block.
     uint256 public starkyPerBlock;
     // Bonus muliplier for early starky makers.
     uint256 public constant BONUS_MULTIPLIER = 1;
-    // Deposit Fee address
-    address public feeAddress;
+    // Max harvest interval: 14 days.
+    uint256 public constant MAXIMUM_HARVEST_INTERVAL = 14 days;
 
     // Info of each pool.
     PoolInfo[] public poolInfo;
     // Info of each user that stakes LP tokens.
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
+    // Token addresses that has tax rate
+    mapping(address => uint16) private _taxableTokens;
     // Total allocation points. Must be the sum of all allocation points in all pools.
     uint256 public totalAllocPoint = 0;
     // The block number when STARKY mining starts.
     uint256 public startBlock;
+    // Total locked up rewards
+    uint256 public totalLockedUpRewards;
+
+    // Starky referral contract address.
+    IStarkyReferral public starkyReferral;
+    // Referral commission rate in basis points.
+    uint16 public referralCommissionRate = 100;
+    // Max referral commission rate: 10%.
+    uint16 public constant MAXIMUM_REFERRAL_COMMISSION_RATE = 1000;
+    // Max deposit fee: 10%
+    uint16 public constant MAXIMUM_DEPOSIT_FEE = 1000;
+    // Max tax rate for the defitionary tokens: 10%
+    uint16 public constant MAXIMUM_TAX_RATE = 1000;
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
-    event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
-    event SetFeeAddress(address indexed user, address indexed newAddress);
-    event SetDevAddress(address indexed user, address indexed newAddress);
-    event UpdateEmissionRate(address indexed user, uint256 starkyPerBlock);
+    event EmergencyWithdraw(
+        address indexed user,
+        uint256 indexed pid,
+        uint256 amount
+    );
+    event EmissionRateUpdated(
+        address indexed caller,
+        uint256 previousAmount,
+        uint256 newAmount
+    );
+    event ReferralCommissionPaid(
+        address indexed user,
+        address indexed referrer,
+        uint256 commissionAmount
+    );
+    event RewardLockedUp(
+        address indexed user,
+        uint256 indexed pid,
+        uint256 amountLockedUp
+    );
 
     constructor(
         StarkyToken _starky,
-        address _devaddr,
-        address _feeAddress,
-        uint256 _starkyPerBlock,
-        uint256 _startBlock
+        uint256 _startBlock,
+        uint256 _starkyPerBlock
     ) public {
         starky = _starky;
-        devaddr = _devaddr;
-        feeAddress = _feeAddress;
-        starkyPerBlock = _starkyPerBlock;
         startBlock = _startBlock;
+        starkyPerBlock = _starkyPerBlock;
+
+        devAddress = msg.sender;
+        feeAddress = msg.sender;
     }
 
     function poolLength() external view returns (uint256) {
         return poolInfo.length;
     }
 
-    mapping(IBEP20 => bool) public poolExistence;
-    modifier nonDuplicated(IBEP20 _lpToken) {
-        require(poolExistence[_lpToken] == false, "nonDuplicated: duplicated");
-        _;
-    }
-
     // Add a new lp to the pool. Can only be called by the owner.
-    function add(uint256 _allocPoint, IBEP20 _lpToken, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner nonDuplicated(_lpToken) {
-        require(_depositFeeBP <= 10000, "add: invalid deposit fee basis points");
+    // XXX DO NOT add the same LP token more than once. Rewards will be messed up if you do.
+    function add(
+        uint256 _allocPoint,
+        IBEP20 _lpToken,
+        uint16 _depositFeeBP,
+        uint256 _harvestInterval,
+        bool _withUpdate
+    ) public onlyOwner {
+        require(
+            _depositFeeBP <= MAXIMUM_DEPOSIT_FEE,
+            "add: invalid deposit fee basis points"
+        );
+        require(
+            _harvestInterval <= MAXIMUM_HARVEST_INTERVAL,
+            "add: invalid harvest interval"
+        );
         if (_withUpdate) {
             massUpdatePools();
         }
-        uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
+        uint256 lastRewardBlock = block.number > startBlock
+            ? block.number
+            : startBlock;
         totalAllocPoint = totalAllocPoint.add(_allocPoint);
-        poolExistence[_lpToken] = true;
-        poolInfo.push(PoolInfo({
-        lpToken : _lpToken,
-        allocPoint : _allocPoint,
-        lastRewardBlock : lastRewardBlock,
-        accStarkyPerShare : 0,
-        depositFeeBP : _depositFeeBP
-        }));
+        poolInfo.push(
+            PoolInfo({
+                lpToken: _lpToken,
+                allocPoint: _allocPoint,
+                lastRewardBlock: lastRewardBlock,
+                accStarkyPerShare: 0,
+                depositFeeBP: _depositFeeBP,
+                harvestInterval: _harvestInterval
+            })
+        );
     }
 
     // Update the given pool's STARKY allocation point and deposit fee. Can only be called by the owner.
-    function set(uint256 _pid, uint256 _allocPoint, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner {
-        require(_depositFeeBP <= 10000, "set: invalid deposit fee basis points");
+    function set(
+        uint256 _pid,
+        uint256 _allocPoint,
+        uint16 _depositFeeBP,
+        uint256 _harvestInterval,
+        bool _withUpdate
+    ) public onlyOwner {
+        require(
+            _depositFeeBP <= MAXIMUM_DEPOSIT_FEE,
+            "set: invalid deposit fee basis points"
+        );
+        require(
+            _harvestInterval <= MAXIMUM_HARVEST_INTERVAL,
+            "set: invalid harvest interval"
+        );
         if (_withUpdate) {
             massUpdatePools();
         }
-        totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(_allocPoint);
+        totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(
+            _allocPoint
+        );
         poolInfo[_pid].allocPoint = _allocPoint;
         poolInfo[_pid].depositFeeBP = _depositFeeBP;
+        poolInfo[_pid].harvestInterval = _harvestInterval;
     }
 
     // Return reward multiplier over the given _from to _to block.
-    function getMultiplier(uint256 _from, uint256 _to) public view returns (uint256) {
+    function getMultiplier(uint256 _from, uint256 _to)
+        public
+        pure
+        returns (uint256)
+    {
         return _to.sub(_from).mul(BONUS_MULTIPLIER);
     }
 
     // View function to see pending STARKYs on frontend.
-    function pendingStarky(uint256 _pid, address _user) external view returns (uint256) {
+    function pendingStarky(uint256 _pid, address _user)
+        external
+        view
+        returns (uint256)
+    {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accStarkyPerShare = pool.accStarkyPerShare;
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-            uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-            uint256 starkyReward = multiplier.mul(starkyPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-            accStarkyPerShare = accStarkyPerShare.add(starkyReward.mul(1e12).div(lpSupply));
+            uint256 multiplier = getMultiplier(
+                pool.lastRewardBlock,
+                block.number
+            );
+            uint256 starkyReward = multiplier
+                .mul(starkyPerBlock)
+                .mul(pool.allocPoint)
+                .div(totalAllocPoint);
+            accStarkyPerShare = accStarkyPerShare.add(
+                starkyReward.mul(1e12).div(lpSupply)
+            );
         }
-        return user.amount.mul(accStarkyPerShare).div(1e12).sub(user.rewardDebt);
+        uint256 pending = user.amount.mul(accStarkyPerShare).div(1e12).sub(
+            user.rewardDebt
+        );
+        return pending.add(user.rewardLockedUp);
+    }
+
+    // View function to see if user can harvest STARKYs.
+    function canHarvest(uint256 _pid, address _user)
+        public
+        view
+        returns (bool)
+    {
+        UserInfo storage user = userInfo[_pid][_user];
+        return block.timestamp >= user.nextHarvestUntil;
     }
 
     // Update reward variables for all pools. Be careful of gas spending!
@@ -166,26 +259,54 @@ contract MasterChef is Ownable, ReentrancyGuard {
             return;
         }
         uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-        uint256 starkyReward = multiplier.mul(starkyPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-        starky.mint(devaddr, starkyReward.div(10));
+        uint256 starkyReward = multiplier
+            .mul(starkyPerBlock)
+            .mul(pool.allocPoint)
+            .div(totalAllocPoint);
+        starky.mint(devAddress, starkyReward.div(10));
         starky.mint(address(this), starkyReward);
-        pool.accStarkyPerShare = pool.accStarkyPerShare.add(starkyReward.mul(1e12).div(lpSupply));
+        pool.accStarkyPerShare = pool.accStarkyPerShare.add(
+            starkyReward.mul(1e12).div(lpSupply)
+        );
         pool.lastRewardBlock = block.number;
     }
 
     // Deposit LP tokens to MasterChef for STARKY allocation.
-    function deposit(uint256 _pid, uint256 _amount) public nonReentrant {
+    function deposit(
+        uint256 _pid,
+        uint256 _amount,
+        address _referrer
+    ) public nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
-        if (user.amount > 0) {
-            uint256 pending = user.amount.mul(pool.accStarkyPerShare).div(1e12).sub(user.rewardDebt);
-            if (pending > 0) {
-                safeStarkyTransfer(msg.sender, pending);
-            }
+        if (
+            _amount > 0 &&
+            address(starkyReferral) != address(0) &&
+            _referrer != address(0) &&
+            _referrer != msg.sender
+        ) {
+            starkyReferral.recordReferral(msg.sender, _referrer);
         }
+        payOrLockupPendingStarky(_pid);
         if (_amount > 0) {
-            pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
+            pool.lpToken.safeTransferFrom(
+                address(msg.sender),
+                address(this),
+                _amount
+            );
+            if (address(pool.lpToken) == address(starky)) {
+                uint256 transferTax = _amount.mul(starky.transferTaxRate()).div(
+                    10000
+                );
+                _amount = _amount.sub(transferTax);
+            } else if (tokenTaxRate(address(pool.lpToken)) > 0) {
+                // When the token in the liquidity is defitionary token
+                uint256 transferTax = _amount
+                    .mul(tokenTaxRate(address(pool.lpToken)))
+                    .div(10000);
+                _amount = _amount.sub(transferTax);
+            }
             if (pool.depositFeeBP > 0) {
                 uint256 depositFee = _amount.mul(pool.depositFeeBP).div(10000);
                 pool.lpToken.safeTransfer(feeAddress, depositFee);
@@ -204,10 +325,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
         updatePool(_pid);
-        uint256 pending = user.amount.mul(pool.accStarkyPerShare).div(1e12).sub(user.rewardDebt);
-        if (pending > 0) {
-            safeStarkyTransfer(msg.sender, pending);
-        }
+        payOrLockupPendingStarky(_pid);
         if (_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
@@ -223,39 +341,138 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 amount = user.amount;
         user.amount = 0;
         user.rewardDebt = 0;
+        user.rewardLockedUp = 0;
+        user.nextHarvestUntil = 0;
         pool.lpToken.safeTransfer(address(msg.sender), amount);
         emit EmergencyWithdraw(msg.sender, _pid, amount);
+    }
+
+    // Pay or lockup pending STARKYs.
+    function payOrLockupPendingStarky(uint256 _pid) internal {
+        PoolInfo storage pool = poolInfo[_pid];
+        UserInfo storage user = userInfo[_pid][msg.sender];
+
+        if (user.nextHarvestUntil == 0) {
+            user.nextHarvestUntil = block.timestamp.add(pool.harvestInterval);
+        }
+
+        uint256 pending = user.amount.mul(pool.accStarkyPerShare).div(1e12).sub(
+            user.rewardDebt
+        );
+        if (canHarvest(_pid, msg.sender)) {
+            if (pending > 0 || user.rewardLockedUp > 0) {
+                uint256 totalRewards = pending.add(user.rewardLockedUp);
+
+                // reset lockup
+                totalLockedUpRewards = totalLockedUpRewards.sub(
+                    user.rewardLockedUp
+                );
+                user.rewardLockedUp = 0;
+                user.nextHarvestUntil = block.timestamp.add(
+                    pool.harvestInterval
+                );
+
+                // send rewards
+                safeStarkyTransfer(msg.sender, totalRewards);
+                payReferralCommission(msg.sender, totalRewards);
+            }
+        } else if (pending > 0) {
+            user.rewardLockedUp = user.rewardLockedUp.add(pending);
+            totalLockedUpRewards = totalLockedUpRewards.add(pending);
+            emit RewardLockedUp(msg.sender, _pid, pending);
+        }
     }
 
     // Safe starky transfer function, just in case if rounding error causes pool to not have enough STARKYs.
     function safeStarkyTransfer(address _to, uint256 _amount) internal {
         uint256 starkyBal = starky.balanceOf(address(this));
-        bool transferSuccess = false;
         if (_amount > starkyBal) {
-            transferSuccess = starky.transfer(_to, starkyBal);
+            starky.transfer(_to, starkyBal);
         } else {
-            transferSuccess = starky.transfer(_to, _amount);
+            starky.transfer(_to, _amount);
         }
-        require(transferSuccess, "safeStarkyTransfer: transfer failed");
     }
 
     // Update dev address by the previous dev.
-    function dev(address _devaddr) public {
-        require(msg.sender == devaddr, "dev: wut?");
-        devaddr = _devaddr;
-        emit SetDevAddress(msg.sender, _devaddr);
+    function setDevAddress(address _devAddress) public {
+        require(msg.sender == devAddress, "setDevAddress: FORBIDDEN");
+        require(_devAddress != address(0), "setDevAddress: ZERO");
+        devAddress = _devAddress;
     }
 
     function setFeeAddress(address _feeAddress) public {
         require(msg.sender == feeAddress, "setFeeAddress: FORBIDDEN");
+        require(_feeAddress != address(0), "setFeeAddress: ZERO");
         feeAddress = _feeAddress;
-        emit SetFeeAddress(msg.sender, _feeAddress);
     }
 
-    //Pancake has to add hidden dummy pools inorder to alter the emission, here we make it simple and transparent to all.
+    /**
+     * @dev Returns the tax rate of the token address.
+     */
+    function tokenTaxRate(address _address) public view returns (uint16) {
+        return _taxableTokens[_address];
+    }
+
+    /**
+     * @dev Set tax rate of token.
+     * Can only be called by the owner.
+     */
+    function setTokenTaxRate(address _address, uint16 _taxRate)
+        public
+        onlyOwner
+    {
+        require(
+            _taxRate <= MAXIMUM_TAX_RATE,
+            "setTokenTaxRate:: Out of maximum limit"
+        );
+        _taxableTokens[_address] = _taxRate;
+    }
+
+    // Pancake has to add hidden dummy pools in order to alter the emission, here we make it simple and transparent to all.
     function updateEmissionRate(uint256 _starkyPerBlock) public onlyOwner {
         massUpdatePools();
+        emit EmissionRateUpdated(msg.sender, starkyPerBlock, _starkyPerBlock);
         starkyPerBlock = _starkyPerBlock;
-        emit UpdateEmissionRate(msg.sender, _starkyPerBlock);
+    }
+
+    // Update the starky referral contract address by the owner
+    function setStarkyReferral(IStarkyReferral _starkyReferral)
+        public
+        onlyOwner
+    {
+        starkyReferral = _starkyReferral;
+    }
+
+    // Update referral commission rate by the owner
+    function setReferralCommissionRate(uint16 _referralCommissionRate)
+        public
+        onlyOwner
+    {
+        require(
+            _referralCommissionRate <= MAXIMUM_REFERRAL_COMMISSION_RATE,
+            "setReferralCommissionRate: invalid referral commission rate basis points"
+        );
+        referralCommissionRate = _referralCommissionRate;
+    }
+
+    // Pay referral commission to the referrer who referred this user.
+    function payReferralCommission(address _user, uint256 _pending) internal {
+        if (
+            address(starkyReferral) != address(0) && referralCommissionRate > 0
+        ) {
+            address referrer = starkyReferral.getReferrer(_user);
+            uint256 commissionAmount = _pending.mul(referralCommissionRate).div(
+                10000
+            );
+
+            if (referrer != address(0) && commissionAmount > 0) {
+                starky.mint(referrer, commissionAmount);
+                starkyReferral.recordReferralCommission(
+                    referrer,
+                    commissionAmount
+                );
+                emit ReferralCommissionPaid(_user, referrer, commissionAmount);
+            }
+        }
     }
 }

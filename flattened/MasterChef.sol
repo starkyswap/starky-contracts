@@ -19,6 +19,62 @@ pragma solidity >=0.6.0 <0.8.0;
  */
 library SafeMath {
     /**
+     * @dev Returns the addition of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryAdd(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        uint256 c = a + b;
+        if (c < a) return (false, 0);
+        return (true, c);
+    }
+
+    /**
+     * @dev Returns the substraction of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function trySub(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        if (b > a) return (false, 0);
+        return (true, a - b);
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryMul(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+        // benefit is lost if 'b' is also tested.
+        // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+        if (a == 0) return (true, 0);
+        uint256 c = a * b;
+        if (c / a != b) return (false, 0);
+        return (true, c);
+    }
+
+    /**
+     * @dev Returns the division of two unsigned integers, with a division by zero flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryDiv(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        if (b == 0) return (false, 0);
+        return (true, a / b);
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers, with a division by zero flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryMod(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        if (b == 0) return (false, 0);
+        return (true, a % b);
+    }
+
+    /**
      * @dev Returns the addition of two unsigned integers, reverting on
      * overflow.
      *
@@ -31,7 +87,6 @@ library SafeMath {
     function add(uint256 a, uint256 b) internal pure returns (uint256) {
         uint256 c = a + b;
         require(c >= a, "SafeMath: addition overflow");
-
         return c;
     }
 
@@ -46,24 +101,8 @@ library SafeMath {
      * - Subtraction cannot overflow.
      */
     function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        return sub(a, b, "SafeMath: subtraction overflow");
-    }
-
-    /**
-     * @dev Returns the subtraction of two unsigned integers, reverting with custom message on
-     * overflow (when the result is negative).
-     *
-     * Counterpart to Solidity's `-` operator.
-     *
-     * Requirements:
-     *
-     * - Subtraction cannot overflow.
-     */
-    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b <= a, errorMessage);
-        uint256 c = a - b;
-
-        return c;
+        require(b <= a, "SafeMath: subtraction overflow");
+        return a - b;
     }
 
     /**
@@ -77,21 +116,14 @@ library SafeMath {
      * - Multiplication cannot overflow.
      */
     function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
-        // benefit is lost if 'b' is also tested.
-        // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
-        if (a == 0) {
-            return 0;
-        }
-
+        if (a == 0) return 0;
         uint256 c = a * b;
         require(c / a == b, "SafeMath: multiplication overflow");
-
         return c;
     }
 
     /**
-     * @dev Returns the integer division of two unsigned integers. Reverts on
+     * @dev Returns the integer division of two unsigned integers, reverting on
      * division by zero. The result is rounded towards zero.
      *
      * Counterpart to Solidity's `/` operator. Note: this function uses a
@@ -103,12 +135,51 @@ library SafeMath {
      * - The divisor cannot be zero.
      */
     function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        return div(a, b, "SafeMath: division by zero");
+        require(b > 0, "SafeMath: division by zero");
+        return a / b;
     }
 
     /**
-     * @dev Returns the integer division of two unsigned integers. Reverts with custom message on
+     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
+     * reverting when dividing by zero.
+     *
+     * Counterpart to Solidity's `%` operator. This function uses a `revert`
+     * opcode (which leaves remaining gas untouched) while Solidity uses an
+     * invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b > 0, "SafeMath: modulo by zero");
+        return a % b;
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting with custom message on
+     * overflow (when the result is negative).
+     *
+     * CAUTION: This function is deprecated because it requires allocating memory for the error
+     * message unnecessarily. For custom revert reasons use {trySub}.
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b <= a, errorMessage);
+        return a - b;
+    }
+
+    /**
+     * @dev Returns the integer division of two unsigned integers, reverting with custom message on
      * division by zero. The result is rounded towards zero.
+     *
+     * CAUTION: This function is deprecated because it requires allocating memory for the error
+     * message unnecessarily. For custom revert reasons use {tryDiv}.
      *
      * Counterpart to Solidity's `/` operator. Note: this function uses a
      * `revert` opcode (which leaves remaining gas untouched) while Solidity
@@ -120,31 +191,15 @@ library SafeMath {
      */
     function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
         require(b > 0, errorMessage);
-        uint256 c = a / b;
-        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
-
-        return c;
+        return a / b;
     }
 
     /**
      * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
-     * Reverts when dividing by zero.
+     * reverting with custom message when dividing by zero.
      *
-     * Counterpart to Solidity's `%` operator. This function uses a `revert`
-     * opcode (which leaves remaining gas untouched) while Solidity uses an
-     * invalid opcode to revert (consuming all remaining gas).
-     *
-     * Requirements:
-     *
-     * - The divisor cannot be zero.
-     */
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
-        return mod(a, b, "SafeMath: modulo by zero");
-    }
-
-    /**
-     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
-     * Reverts with custom message when dividing by zero.
+     * CAUTION: This function is deprecated because it requires allocating memory for the error
+     * message unnecessarily. For custom revert reasons use {tryMod}.
      *
      * Counterpart to Solidity's `%` operator. This function uses a `revert`
      * opcode (which leaves remaining gas untouched) while Solidity uses an
@@ -155,14 +210,16 @@ library SafeMath {
      * - The divisor cannot be zero.
      */
     function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b != 0, errorMessage);
+        require(b > 0, errorMessage);
         return a % b;
     }
 }
 
 // File: contracts\libs\IBEP20.sol
 
-pragma solidity >=0.6.4;
+
+
+pragma solidity >=0.4.0;
 
 interface IBEP20 {
     /**
@@ -238,7 +295,11 @@ interface IBEP20 {
      *
      * Emits a {Transfer} event.
      */
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
 
     /**
      * @dev Emitted when `value` tokens are moved from one account (`from`) to
@@ -403,6 +464,30 @@ library Address {
         return _verifyCallResult(success, returndata, errorMessage);
     }
 
+    /**
+     * @dev Same as {xref-Address-functionCall-address-bytes-}[`functionCall`],
+     * but performing a delegate call.
+     *
+     * _Available since v3.4._
+     */
+    function functionDelegateCall(address target, bytes memory data) internal returns (bytes memory) {
+        return functionDelegateCall(target, data, "Address: low-level delegate call failed");
+    }
+
+    /**
+     * @dev Same as {xref-Address-functionCall-address-bytes-string-}[`functionCall`],
+     * but performing a delegate call.
+     *
+     * _Available since v3.4._
+     */
+    function functionDelegateCall(address target, bytes memory data, string memory errorMessage) internal returns (bytes memory) {
+        require(isContract(target), "Address: delegate call to non-contract");
+
+        // solhint-disable-next-line avoid-low-level-calls
+        (bool success, bytes memory returndata) = target.delegatecall(data);
+        return _verifyCallResult(success, returndata, errorMessage);
+    }
+
     function _verifyCallResult(bool success, bytes memory returndata, string memory errorMessage) private pure returns(bytes memory) {
         if (success) {
             return returndata;
@@ -427,7 +512,7 @@ library Address {
 
 
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity ^0.6.0;
 
 
 
@@ -445,11 +530,20 @@ library SafeBEP20 {
     using SafeMath for uint256;
     using Address for address;
 
-    function safeTransfer(IBEP20 token, address to, uint256 value) internal {
+    function safeTransfer(
+        IBEP20 token,
+        address to,
+        uint256 value
+    ) internal {
         _callOptionalReturn(token, abi.encodeWithSelector(token.transfer.selector, to, value));
     }
 
-    function safeTransferFrom(IBEP20 token, address from, address to, uint256 value) internal {
+    function safeTransferFrom(
+        IBEP20 token,
+        address from,
+        address to,
+        uint256 value
+    ) internal {
         _callOptionalReturn(token, abi.encodeWithSelector(token.transferFrom.selector, from, to, value));
     }
 
@@ -460,24 +554,40 @@ library SafeBEP20 {
      * Whenever possible, use {safeIncreaseAllowance} and
      * {safeDecreaseAllowance} instead.
      */
-    function safeApprove(IBEP20 token, address spender, uint256 value) internal {
+    function safeApprove(
+        IBEP20 token,
+        address spender,
+        uint256 value
+    ) internal {
         // safeApprove should only be called when setting an initial allowance,
         // or when resetting it to zero. To increase and decrease it, use
         // 'safeIncreaseAllowance' and 'safeDecreaseAllowance'
         // solhint-disable-next-line max-line-length
-        require((value == 0) || (token.allowance(address(this), spender) == 0),
+        require(
+            (value == 0) || (token.allowance(address(this), spender) == 0),
             "SafeBEP20: approve from non-zero to non-zero allowance"
         );
         _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, value));
     }
 
-    function safeIncreaseAllowance(IBEP20 token, address spender, uint256 value) internal {
+    function safeIncreaseAllowance(
+        IBEP20 token,
+        address spender,
+        uint256 value
+    ) internal {
         uint256 newAllowance = token.allowance(address(this), spender).add(value);
         _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
-    function safeDecreaseAllowance(IBEP20 token, address spender, uint256 value) internal {
-        uint256 newAllowance = token.allowance(address(this), spender).sub(value, "SafeBEP20: decreased allowance below zero");
+    function safeDecreaseAllowance(
+        IBEP20 token,
+        address spender,
+        uint256 value
+    ) internal {
+        uint256 newAllowance = token.allowance(address(this), spender).sub(
+            value,
+            "SafeBEP20: decreased allowance below zero"
+        );
         _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
     }
 
@@ -493,14 +603,38 @@ library SafeBEP20 {
         // the target address contains contract code and also asserts for success in the low-level call.
 
         bytes memory returndata = address(token).functionCall(data, "SafeBEP20: low-level call failed");
-        if (returndata.length > 0) { // Return data is optional
+        if (returndata.length > 0) {
+            // Return data is optional
             // solhint-disable-next-line max-line-length
             require(abi.decode(returndata, (bool)), "SafeBEP20: BEP20 operation did not succeed");
         }
     }
 }
 
-// File: node_modules\@openzeppelin\contracts\GSN\Context.sol
+// File: contracts\libs\IStarkyReferral.sol
+
+
+
+pragma solidity 0.6.12;
+
+interface IStarkyReferral {
+    /**
+     * @dev Record referral.
+     */
+    function recordReferral(address user, address referrer) external;
+
+    /**
+     * @dev Record referral commission.
+     */
+    function recordReferralCommission(address referrer, uint256 commission) external;
+
+    /**
+     * @dev Get the referrer address that referred the user.
+     */
+    function getReferrer(address user) external view returns (address);
+}
+
+// File: node_modules\@openzeppelin\contracts\utils\Context.sol
 
 
 
@@ -562,7 +696,7 @@ abstract contract Ownable is Context {
     /**
      * @dev Returns the address of the current owner.
      */
-    function owner() public view returns (address) {
+    function owner() public view virtual returns (address) {
         return _owner;
     }
 
@@ -570,7 +704,7 @@ abstract contract Ownable is Context {
      * @dev Throws if called by any account other than the owner.
      */
     modifier onlyOwner() {
-        require(_owner == _msgSender(), "Ownable: caller is not the owner");
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
         _;
     }
 
@@ -662,12 +796,12 @@ abstract contract ReentrancyGuard {
     }
 }
 
-
 // File: contracts\libs\BEP20.sol
 
 
 
 pragma solidity >=0.4.0;
+
 
 
 
@@ -699,6 +833,7 @@ pragma solidity >=0.4.0;
  */
 contract BEP20 is Context, IBEP20, Ownable {
     using SafeMath for uint256;
+    using Address for address;
 
     mapping(address => uint256) private _balances;
 
@@ -733,25 +868,24 @@ contract BEP20 is Context, IBEP20, Ownable {
     }
 
     /**
-     * @dev Returns the name of the token.
+     * @dev Returns the token name.
      */
     function name() public override view returns (string memory) {
         return _name;
     }
 
     /**
-     * @dev Returns the symbol of the token, usually a shorter version of the
-     * name.
+     * @dev Returns the token decimals.
      */
-    function symbol() public override view returns (string memory) {
-        return _symbol;
+    function decimals() public override view returns (uint8) {
+        return _decimals;
     }
 
     /**
-    * @dev Returns the number of decimals used to get its user representation.
-    */
-    function decimals() public override view returns (uint8) {
-        return _decimals;
+     * @dev Returns the token symbol.
+     */
+    function symbol() public override view returns (string memory) {
+        return _symbol;
     }
 
     /**
@@ -812,12 +946,16 @@ contract BEP20 is Context, IBEP20, Ownable {
      * - the caller must have allowance for `sender`'s tokens of at least
      * `amount`.
      */
-    function transferFrom (address sender, address recipient, uint256 amount) public override returns (bool) {
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public override returns (bool) {
         _transfer(sender, recipient, amount);
         _approve(
             sender,
             _msgSender(),
-            _allowances[sender][_msgSender()].sub(amount, 'BEP20: transfer amount exceeds allowance')
+            _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance")
         );
         return true;
     }
@@ -854,7 +992,11 @@ contract BEP20 is Context, IBEP20, Ownable {
      * `subtractedValue`.
      */
     function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, 'BEP20: decreased allowance below zero'));
+        _approve(
+            _msgSender(),
+            spender,
+            _allowances[_msgSender()][spender].sub(subtractedValue, "BEP20: decreased allowance below zero")
+        );
         return true;
     }
 
@@ -885,11 +1027,15 @@ contract BEP20 is Context, IBEP20, Ownable {
      * - `recipient` cannot be the zero address.
      * - `sender` must have a balance of at least `amount`.
      */
-    function _transfer (address sender, address recipient, uint256 amount) internal {
-        require(sender != address(0), 'BEP20: transfer from the zero address');
-        require(recipient != address(0), 'BEP20: transfer to the zero address');
+    function _transfer(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) internal virtual {
+        require(sender != address(0), "BEP20: transfer from the zero address");
+        require(recipient != address(0), "BEP20: transfer to the zero address");
 
-        _balances[sender] = _balances[sender].sub(amount, 'BEP20: transfer amount exceeds balance');
+        _balances[sender] = _balances[sender].sub(amount, "BEP20: transfer amount exceeds balance");
         _balances[recipient] = _balances[recipient].add(amount);
         emit Transfer(sender, recipient, amount);
     }
@@ -904,7 +1050,7 @@ contract BEP20 is Context, IBEP20, Ownable {
      * - `to` cannot be the zero address.
      */
     function _mint(address account, uint256 amount) internal {
-        require(account != address(0), 'BEP20: mint to the zero address');
+        require(account != address(0), "BEP20: mint to the zero address");
 
         _totalSupply = _totalSupply.add(amount);
         _balances[account] = _balances[account].add(amount);
@@ -923,9 +1069,9 @@ contract BEP20 is Context, IBEP20, Ownable {
      * - `account` must have at least `amount` tokens.
      */
     function _burn(address account, uint256 amount) internal {
-        require(account != address(0), 'BEP20: burn from the zero address');
+        require(account != address(0), "BEP20: burn from the zero address");
 
-        _balances[account] = _balances[account].sub(amount, 'BEP20: burn amount exceeds balance');
+        _balances[account] = _balances[account].sub(amount, "BEP20: burn amount exceeds balance");
         _totalSupply = _totalSupply.sub(amount);
         emit Transfer(account, address(0), amount);
     }
@@ -943,9 +1089,13 @@ contract BEP20 is Context, IBEP20, Ownable {
      * - `owner` cannot be the zero address.
      * - `spender` cannot be the zero address.
      */
-    function _approve (address owner, address spender, uint256 amount) internal {
-        require(owner != address(0), 'BEP20: approve from the zero address');
-        require(spender != address(0), 'BEP20: approve to the zero address');
+    function _approve(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal {
+        require(owner != address(0), "BEP20: approve from the zero address");
+        require(spender != address(0), "BEP20: approve to the zero address");
 
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
@@ -959,21 +1109,532 @@ contract BEP20 is Context, IBEP20, Ownable {
      */
     function _burnFrom(address account, uint256 amount) internal {
         _burn(account, amount);
-        _approve(account, _msgSender(), _allowances[account][_msgSender()].sub(amount, 'BEP20: burn amount exceeds allowance'));
+        _approve(
+            account,
+            _msgSender(),
+            _allowances[account][_msgSender()].sub(amount, "BEP20: burn amount exceeds allowance")
+        );
     }
+}
+
+// File: node_modules\@uniswap\v2-periphery\contracts\interfaces\IUniswapV2Router01.sol
+
+pragma solidity >=0.6.2;
+
+interface IUniswapV2Router01 {
+    function factory() external pure returns (address);
+    function WETH() external pure returns (address);
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountA, uint amountB, uint liquidity);
+    function addLiquidityETH(
+        address token,
+        uint amountTokenDesired,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external payable returns (uint amountToken, uint amountETH, uint liquidity);
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint liquidity,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountA, uint amountB);
+    function removeLiquidityETH(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountToken, uint amountETH);
+    function removeLiquidityWithPermit(
+        address tokenA,
+        address tokenB,
+        uint liquidity,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline,
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external returns (uint amountA, uint amountB);
+    function removeLiquidityETHWithPermit(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline,
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external returns (uint amountToken, uint amountETH);
+    function swapExactTokensForTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+    function swapTokensForExactTokens(
+        uint amountOut,
+        uint amountInMax,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+    function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline)
+        external
+        payable
+        returns (uint[] memory amounts);
+    function swapTokensForExactETH(uint amountOut, uint amountInMax, address[] calldata path, address to, uint deadline)
+        external
+        returns (uint[] memory amounts);
+    function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
+        external
+        returns (uint[] memory amounts);
+    function swapETHForExactTokens(uint amountOut, address[] calldata path, address to, uint deadline)
+        external
+        payable
+        returns (uint[] memory amounts);
+
+    function quote(uint amountA, uint reserveA, uint reserveB) external pure returns (uint amountB);
+    function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) external pure returns (uint amountOut);
+    function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) external pure returns (uint amountIn);
+    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
+    function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
+}
+
+// File: @uniswap\v2-periphery\contracts\interfaces\IUniswapV2Router02.sol
+
+pragma solidity >=0.6.2;
+
+
+interface IUniswapV2Router02 is IUniswapV2Router01 {
+    function removeLiquidityETHSupportingFeeOnTransferTokens(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountETH);
+    function removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline,
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external returns (uint amountETH);
+
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external;
+    function swapExactETHForTokensSupportingFeeOnTransferTokens(
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external payable;
+    function swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external;
+}
+
+// File: @uniswap\v2-core\contracts\interfaces\IUniswapV2Pair.sol
+
+pragma solidity >=0.5.0;
+
+interface IUniswapV2Pair {
+    event Approval(address indexed owner, address indexed spender, uint value);
+    event Transfer(address indexed from, address indexed to, uint value);
+
+    function name() external pure returns (string memory);
+    function symbol() external pure returns (string memory);
+    function decimals() external pure returns (uint8);
+    function totalSupply() external view returns (uint);
+    function balanceOf(address owner) external view returns (uint);
+    function allowance(address owner, address spender) external view returns (uint);
+
+    function approve(address spender, uint value) external returns (bool);
+    function transfer(address to, uint value) external returns (bool);
+    function transferFrom(address from, address to, uint value) external returns (bool);
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+    function PERMIT_TYPEHASH() external pure returns (bytes32);
+    function nonces(address owner) external view returns (uint);
+
+    function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
+
+    event Mint(address indexed sender, uint amount0, uint amount1);
+    event Burn(address indexed sender, uint amount0, uint amount1, address indexed to);
+    event Swap(
+        address indexed sender,
+        uint amount0In,
+        uint amount1In,
+        uint amount0Out,
+        uint amount1Out,
+        address indexed to
+    );
+    event Sync(uint112 reserve0, uint112 reserve1);
+
+    function MINIMUM_LIQUIDITY() external pure returns (uint);
+    function factory() external view returns (address);
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function price0CumulativeLast() external view returns (uint);
+    function price1CumulativeLast() external view returns (uint);
+    function kLast() external view returns (uint);
+
+    function mint(address to) external returns (uint liquidity);
+    function burn(address to) external returns (uint amount0, uint amount1);
+    function swap(uint amount0Out, uint amount1Out, address to, bytes calldata data) external;
+    function skim(address to) external;
+    function sync() external;
+
+    function initialize(address, address) external;
+}
+
+// File: @uniswap\v2-core\contracts\interfaces\IUniswapV2Factory.sol
+
+pragma solidity >=0.5.0;
+
+interface IUniswapV2Factory {
+    event PairCreated(address indexed token0, address indexed token1, address pair, uint);
+
+    function feeTo() external view returns (address);
+    function feeToSetter() external view returns (address);
+
+    function getPair(address tokenA, address tokenB) external view returns (address pair);
+    function allPairs(uint) external view returns (address pair);
+    function allPairsLength() external view returns (uint);
+
+    function createPair(address tokenA, address tokenB) external returns (address pair);
+
+    function setFeeTo(address) external;
+    function setFeeToSetter(address) external;
 }
 
 // File: contracts\StarkyToken.sol
 
+
+
 pragma solidity 0.6.12;
 
 
+
+
+
 // StarkyToken with Governance.
-contract StarkyToken is BEP20('StarkySwap Token', 'STARKY') {
+contract StarkyToken is BEP20 {
+    // Transfer tax rate in basis points. (default 10%)
+    uint16 public transferTaxRate = 1000;
+    // Burn rate % of transfer tax. (default 50% x 10% = 5% of total amount).
+    uint16 public burnRate = 50;
+    // Max transfer tax rate: 20%.
+    uint16 public constant MAXIMUM_TRANSFER_TAX_RATE = 2000;
+    // Burn address
+    address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+
+    // Max transfer amount rate in basis points. (default is 0.5% of total supply)
+    uint16 public maxTransferAmountRate = 50;
+    // Addresses that excluded from antiWhale
+    mapping(address => bool) private _excludedFromAntiWhale;
+    // Automatic swap and liquify enabled
+    bool public swapAndLiquifyEnabled = false;
+    // Min amount to liquify. (default 500 STARKYs)
+    uint256 public minAmountToLiquify = 500 ether;
+    // The swap router, modifiable. Will be changed to StarkySwap's router when our own AMM release
+    IUniswapV2Router02 public starkySwapRouter;
+    // The trading pair
+    address public starkySwapPair;
+    // In swap and liquify
+    bool private _inSwapAndLiquify;
+
+    // The operator can only update the transfer tax rate
+    address private _operator;
+
+    // Events
+    event OperatorTransferred(address indexed previousOperator, address indexed newOperator);
+    event TransferTaxRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
+    event BurnRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
+    event MaxTransferAmountRateUpdated(address indexed operator, uint256 previousRate, uint256 newRate);
+    event SwapAndLiquifyEnabledUpdated(address indexed operator, bool enabled);
+    event MinAmountToLiquifyUpdated(address indexed operator, uint256 previousAmount, uint256 newAmount);
+    event StarkySwapRouterUpdated(address indexed operator, address indexed router, address indexed pair);
+    event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
+
+    modifier onlyOperator() {
+        require(_operator == msg.sender, "operator: caller is not the operator");
+        _;
+    }
+
+    modifier antiWhale(address sender, address recipient, uint256 amount) {
+        if (maxTransferAmount() > 0) {
+            if (
+                _excludedFromAntiWhale[sender] == false
+                && _excludedFromAntiWhale[recipient] == false
+            ) {
+                require(amount <= maxTransferAmount(), "STARKY::antiWhale: Transfer amount exceeds the maxTransferAmount");
+            }
+        }
+        _;
+    }
+
+    modifier lockTheSwap {
+        _inSwapAndLiquify = true;
+        _;
+        _inSwapAndLiquify = false;
+    }
+
+    modifier transferTaxFree {
+        uint16 _transferTaxRate = transferTaxRate;
+        transferTaxRate = 0;
+        _;
+        transferTaxRate = _transferTaxRate;
+    }
+
+    /**
+     * @notice Constructs the StarkyToken contract.
+     */
+    constructor() public BEP20("Starky Swap", "STARKY") {
+        _operator = _msgSender();
+        emit OperatorTransferred(address(0), _operator);
+
+        _excludedFromAntiWhale[msg.sender] = true;
+        _excludedFromAntiWhale[address(0)] = true;
+        _excludedFromAntiWhale[address(this)] = true;
+        _excludedFromAntiWhale[BURN_ADDRESS] = true;
+    }
+
     /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (MasterChef).
     function mint(address _to, uint256 _amount) public onlyOwner {
         _mint(_to, _amount);
         _moveDelegates(address(0), _delegates[_to], _amount);
+    }
+
+    /// @dev overrides transfer function to meet tokenomics of STARKY
+    function _transfer(address sender, address recipient, uint256 amount) internal virtual override antiWhale(sender, recipient, amount) {
+        // swap and liquify
+        if (
+            swapAndLiquifyEnabled == true
+            && _inSwapAndLiquify == false
+            && address(starkySwapRouter) != address(0)
+            && starkySwapPair != address(0)
+            && sender != starkySwapPair
+            && sender != owner()
+        ) {
+            swapAndLiquify();
+        }
+
+        if (recipient == BURN_ADDRESS || transferTaxRate == 0) {
+            super._transfer(sender, recipient, amount);
+        } else {
+            // default tax is 5% of every transfer
+            uint256 taxAmount = amount.mul(transferTaxRate).div(10000);
+            uint256 burnAmount = taxAmount.mul(burnRate).div(100);
+            uint256 liquidityAmount = taxAmount.sub(burnAmount);
+            require(taxAmount == burnAmount + liquidityAmount, "STARKY::transfer: Burn value invalid");
+
+            // default 95% of transfer sent to recipient
+            uint256 sendAmount = amount.sub(taxAmount);
+            require(amount == sendAmount + taxAmount, "STARKY::transfer: Tax value invalid");
+
+            super._transfer(sender, BURN_ADDRESS, burnAmount);
+            super._transfer(sender, address(this), liquidityAmount);
+            super._transfer(sender, recipient, sendAmount);
+            amount = sendAmount;
+        }
+    }
+
+    /// @dev Swap and liquify
+    function swapAndLiquify() private lockTheSwap transferTaxFree {
+        uint256 contractTokenBalance = balanceOf(address(this));
+        uint256 maxTransferAmount = maxTransferAmount();
+        contractTokenBalance = contractTokenBalance > maxTransferAmount ? maxTransferAmount : contractTokenBalance;
+
+        if (contractTokenBalance >= minAmountToLiquify) {
+            // only min amount to liquify
+            uint256 liquifyAmount = minAmountToLiquify;
+
+            // split the liquify amount into halves
+            uint256 half = liquifyAmount.div(2);
+            uint256 otherHalf = liquifyAmount.sub(half);
+
+            // capture the contract's current ETH balance.
+            // this is so that we can capture exactly the amount of ETH that the
+            // swap creates, and not make the liquidity event include any ETH that
+            // has been manually sent to the contract
+            uint256 initialBalance = address(this).balance;
+
+            // swap tokens for ETH
+            swapTokensForEth(half);
+
+            // how much ETH did we just swap into?
+            uint256 newBalance = address(this).balance.sub(initialBalance);
+
+            // add liquidity
+            addLiquidity(otherHalf, newBalance);
+
+            emit SwapAndLiquify(half, newBalance, otherHalf);
+        }
+    }
+
+    /// @dev Swap tokens for eth
+    function swapTokensForEth(uint256 tokenAmount) private {
+        // generate the starkySwap pair path of token -> weth
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = starkySwapRouter.WETH();
+
+        _approve(address(this), address(starkySwapRouter), tokenAmount);
+
+        // make the swap
+        starkySwapRouter.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0, // accept any amount of ETH
+            path,
+            address(this),
+            block.timestamp
+        );
+    }
+
+    /// @dev Add liquidity
+    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
+        // approve token transfer to cover all possible scenarios
+        _approve(address(this), address(starkySwapRouter), tokenAmount);
+
+        // add the liquidity
+        starkySwapRouter.addLiquidityETH{value: ethAmount}(
+            address(this),
+            tokenAmount,
+            0, // slippage is unavoidable
+            0, // slippage is unavoidable
+            operator(),
+            block.timestamp
+        );
+    }
+
+    /**
+     * @dev Returns the max transfer amount.
+     */
+    function maxTransferAmount() public view returns (uint256) {
+        return totalSupply().mul(maxTransferAmountRate).div(10000);
+    }
+
+    /**
+     * @dev Returns the address is excluded from antiWhale or not.
+     */
+    function isExcludedFromAntiWhale(address _account) public view returns (bool) {
+        return _excludedFromAntiWhale[_account];
+    }
+
+    // To receive BNB from starkySwapRouter when swapping
+    receive() external payable {}
+
+    /**
+     * @dev Update the transfer tax rate.
+     * Can only be called by the current operator.
+     */
+    function updateTransferTaxRate(uint16 _transferTaxRate) public onlyOperator {
+        require(_transferTaxRate <= MAXIMUM_TRANSFER_TAX_RATE, "STARKY::updateTransferTaxRate: Transfer tax rate must not exceed the maximum rate.");
+        emit TransferTaxRateUpdated(msg.sender, transferTaxRate, _transferTaxRate);
+        transferTaxRate = _transferTaxRate;
+    }
+
+    /**
+     * @dev Update the burn rate.
+     * Can only be called by the current operator.
+     */
+    function updateBurnRate(uint16 _burnRate) public onlyOperator {
+        require(_burnRate <= 100, "STARKY::updateBurnRate: Burn rate must not exceed the maximum rate.");
+        emit BurnRateUpdated(msg.sender, burnRate, _burnRate);
+        burnRate = _burnRate;
+    }
+
+    /**
+     * @dev Update the max transfer amount rate.
+     * Can only be called by the current operator.
+     */
+    function updateMaxTransferAmountRate(uint16 _maxTransferAmountRate) public onlyOperator {
+        require(_maxTransferAmountRate <= 10000, "STARKY::updateMaxTransferAmountRate: Max transfer amount rate must not exceed the maximum rate.");
+        emit MaxTransferAmountRateUpdated(msg.sender, maxTransferAmountRate, _maxTransferAmountRate);
+        maxTransferAmountRate = _maxTransferAmountRate;
+    }
+
+    /**
+     * @dev Update the min amount to liquify.
+     * Can only be called by the current operator.
+     */
+    function updateMinAmountToLiquify(uint256 _minAmount) public onlyOperator {
+        emit MinAmountToLiquifyUpdated(msg.sender, minAmountToLiquify, _minAmount);
+        minAmountToLiquify = _minAmount;
+    }
+
+    /**
+     * @dev Exclude or include an address from antiWhale.
+     * Can only be called by the current operator.
+     */
+    function setExcludedFromAntiWhale(address _account, bool _excluded) public onlyOperator {
+        _excludedFromAntiWhale[_account] = _excluded;
+    }
+
+    /**
+     * @dev Update the swapAndLiquifyEnabled.
+     * Can only be called by the current operator.
+     */
+    function updateSwapAndLiquifyEnabled(bool _enabled) public onlyOperator {
+        emit SwapAndLiquifyEnabledUpdated(msg.sender, _enabled);
+        swapAndLiquifyEnabled = _enabled;
+    }
+
+    /**
+     * @dev Update the swap router.
+     * Can only be called by the current operator.
+     */
+    function updateStarkySwapRouter(address _router) public onlyOperator {
+        starkySwapRouter = IUniswapV2Router02(_router);
+        starkySwapPair = IUniswapV2Factory(starkySwapRouter.factory()).getPair(address(this), starkySwapRouter.WETH());
+        require(starkySwapPair != address(0), "STARKY::updateStarkySwapRouter: Invalid pair address.");
+        emit StarkySwapRouterUpdated(msg.sender, address(starkySwapRouter), starkySwapPair);
+    }
+
+    /**
+     * @dev Returns the address of the current operator.
+     */
+    function operator() public view returns (address) {
+        return _operator;
+    }
+
+    /**
+     * @dev Transfers operator of the contract to a new account (`newOperator`).
+     * Can only be called by the current operator.
+     */
+    function transferOperator(address newOperator) public onlyOperator {
+        require(newOperator != address(0), "STARKY::transferOperator: new operator is the zero address");
+        emit OperatorTransferred(_operator, newOperator);
+        _operator = newOperator;
     }
 
     // Copied and modified from YAM code:
@@ -982,7 +1643,7 @@ contract StarkyToken is BEP20('StarkySwap Token', 'STARKY') {
     // Which is copied and modified from COMPOUND:
     // https://github.com/compound-finance/compound-protocol/blob/master/contracts/Governance/Comp.sol
 
-    /// @notice A record of each accounts delegate
+    /// @dev A record of each accounts delegate
     mapping (address => address) internal _delegates;
 
     /// @notice A checkpoint for marking number of votes from a given block
@@ -1219,6 +1880,7 @@ pragma solidity 0.6.12;
 
 
 
+
 // MasterChef is the master of Starky. He can make Starky and he is a fair guy.
 //
 // Note that it's ownable and the owner wields tremendous power. The ownership
@@ -1232,8 +1894,10 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     // Info of each user.
     struct UserInfo {
-        uint256 amount;         // How many LP tokens the user has provided.
-        uint256 rewardDebt;     // Reward debt. See explanation below.
+        uint256 amount; // How many LP tokens the user has provided.
+        uint256 rewardDebt; // Reward debt. See explanation below.
+        uint256 rewardLockedUp; // Reward locked up.
+        uint256 nextHarvestUntil; // When can the user harvest again.
         //
         // We do some fancy math here. Basically, any point in time, the amount of STARKYs
         // entitled to a user but is pending to be distributed is:
@@ -1249,110 +1913,200 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     // Info of each pool.
     struct PoolInfo {
-        IBEP20 lpToken;           // Address of LP token contract.
-        uint256 allocPoint;       // How many allocation points assigned to this pool. STARKYs to distribute per block.
-        uint256 lastRewardBlock;  // Last block number that STARKYs distribution occurs.
-        uint256 accStarkyPerShare;   // Accumulated STARKYs per share, times 1e12. See below.
-        uint16 depositFeeBP;      // Deposit fee in basis points
+        IBEP20 lpToken; // Address of LP token contract.
+        uint256 allocPoint; // How many allocation points assigned to this pool. STARKYs to distribute per block.
+        uint256 lastRewardBlock; // Last block number that STARKYs distribution occurs.
+        uint256 accStarkyPerShare; // Accumulated STARKYs per share, times 1e12. See below.
+        uint16 depositFeeBP; // Deposit fee in basis points
+        uint256 harvestInterval; // Harvest interval in seconds
     }
 
     // The STARKY TOKEN!
     StarkyToken public starky;
     // Dev address.
-    address public devaddr;
+    address public devAddress;
+    // Deposit Fee address
+    address public feeAddress;
     // STARKY tokens created per block.
     uint256 public starkyPerBlock;
     // Bonus muliplier for early starky makers.
     uint256 public constant BONUS_MULTIPLIER = 1;
-    // Deposit Fee address
-    address public feeAddress;
+    // Max harvest interval: 14 days.
+    uint256 public constant MAXIMUM_HARVEST_INTERVAL = 14 days;
 
     // Info of each pool.
     PoolInfo[] public poolInfo;
     // Info of each user that stakes LP tokens.
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
+    // Token addresses that has tax rate
+    mapping(address => uint16) private _taxableTokens;
     // Total allocation points. Must be the sum of all allocation points in all pools.
     uint256 public totalAllocPoint = 0;
     // The block number when STARKY mining starts.
     uint256 public startBlock;
+    // Total locked up rewards
+    uint256 public totalLockedUpRewards;
+
+    // Starky referral contract address.
+    IStarkyReferral public starkyReferral;
+    // Referral commission rate in basis points.
+    uint16 public referralCommissionRate = 100;
+    // Max referral commission rate: 10%.
+    uint16 public constant MAXIMUM_REFERRAL_COMMISSION_RATE = 1000;
+    // Max deposit fee: 10%
+    uint16 public constant MAXIMUM_DEPOSIT_FEE = 1000;
+    // Max tax rate for the defitionary tokens: 10%
+    uint16 public constant MAXIMUM_TAX_RATE = 1000;
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
-    event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
-    event SetFeeAddress(address indexed user, address indexed newAddress);
-    event SetDevAddress(address indexed user, address indexed newAddress);
-    event UpdateEmissionRate(address indexed user, uint256 starkyPerBlock);
+    event EmergencyWithdraw(
+        address indexed user,
+        uint256 indexed pid,
+        uint256 amount
+    );
+    event EmissionRateUpdated(
+        address indexed caller,
+        uint256 previousAmount,
+        uint256 newAmount
+    );
+    event ReferralCommissionPaid(
+        address indexed user,
+        address indexed referrer,
+        uint256 commissionAmount
+    );
+    event RewardLockedUp(
+        address indexed user,
+        uint256 indexed pid,
+        uint256 amountLockedUp
+    );
 
     constructor(
         StarkyToken _starky,
-        address _devaddr,
-        address _feeAddress,
-        uint256 _starkyPerBlock,
-        uint256 _startBlock
+        uint256 _startBlock,
+        uint256 _starkyPerBlock
     ) public {
         starky = _starky;
-        devaddr = _devaddr;
-        feeAddress = _feeAddress;
-        starkyPerBlock = _starkyPerBlock;
         startBlock = _startBlock;
+        starkyPerBlock = _starkyPerBlock;
+
+        devAddress = msg.sender;
+        feeAddress = msg.sender;
     }
 
     function poolLength() external view returns (uint256) {
         return poolInfo.length;
     }
 
-    mapping(IBEP20 => bool) public poolExistence;
-    modifier nonDuplicated(IBEP20 _lpToken) {
-        require(poolExistence[_lpToken] == false, "nonDuplicated: duplicated");
-        _;
-    }
-
     // Add a new lp to the pool. Can only be called by the owner.
-    function add(uint256 _allocPoint, IBEP20 _lpToken, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner nonDuplicated(_lpToken) {
-        require(_depositFeeBP <= 10000, "add: invalid deposit fee basis points");
+    // XXX DO NOT add the same LP token more than once. Rewards will be messed up if you do.
+    function add(
+        uint256 _allocPoint,
+        IBEP20 _lpToken,
+        uint16 _depositFeeBP,
+        uint256 _harvestInterval,
+        bool _withUpdate
+    ) public onlyOwner {
+        require(
+            _depositFeeBP <= MAXIMUM_DEPOSIT_FEE,
+            "add: invalid deposit fee basis points"
+        );
+        require(
+            _harvestInterval <= MAXIMUM_HARVEST_INTERVAL,
+            "add: invalid harvest interval"
+        );
         if (_withUpdate) {
             massUpdatePools();
         }
-        uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
+        uint256 lastRewardBlock = block.number > startBlock
+            ? block.number
+            : startBlock;
         totalAllocPoint = totalAllocPoint.add(_allocPoint);
-        poolExistence[_lpToken] = true;
-        poolInfo.push(PoolInfo({
-        lpToken : _lpToken,
-        allocPoint : _allocPoint,
-        lastRewardBlock : lastRewardBlock,
-        accStarkyPerShare : 0,
-        depositFeeBP : _depositFeeBP
-        }));
+        poolInfo.push(
+            PoolInfo({
+                lpToken: _lpToken,
+                allocPoint: _allocPoint,
+                lastRewardBlock: lastRewardBlock,
+                accStarkyPerShare: 0,
+                depositFeeBP: _depositFeeBP,
+                harvestInterval: _harvestInterval
+            })
+        );
     }
 
     // Update the given pool's STARKY allocation point and deposit fee. Can only be called by the owner.
-    function set(uint256 _pid, uint256 _allocPoint, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner {
-        require(_depositFeeBP <= 10000, "set: invalid deposit fee basis points");
+    function set(
+        uint256 _pid,
+        uint256 _allocPoint,
+        uint16 _depositFeeBP,
+        uint256 _harvestInterval,
+        bool _withUpdate
+    ) public onlyOwner {
+        require(
+            _depositFeeBP <= MAXIMUM_DEPOSIT_FEE,
+            "set: invalid deposit fee basis points"
+        );
+        require(
+            _harvestInterval <= MAXIMUM_HARVEST_INTERVAL,
+            "set: invalid harvest interval"
+        );
         if (_withUpdate) {
             massUpdatePools();
         }
-        totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(_allocPoint);
+        totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(
+            _allocPoint
+        );
         poolInfo[_pid].allocPoint = _allocPoint;
         poolInfo[_pid].depositFeeBP = _depositFeeBP;
+        poolInfo[_pid].harvestInterval = _harvestInterval;
     }
 
     // Return reward multiplier over the given _from to _to block.
-    function getMultiplier(uint256 _from, uint256 _to) public view returns (uint256) {
+    function getMultiplier(uint256 _from, uint256 _to)
+        public
+        pure
+        returns (uint256)
+    {
         return _to.sub(_from).mul(BONUS_MULTIPLIER);
     }
 
     // View function to see pending STARKYs on frontend.
-    function pendingStarky(uint256 _pid, address _user) external view returns (uint256) {
+    function pendingStarky(uint256 _pid, address _user)
+        external
+        view
+        returns (uint256)
+    {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accStarkyPerShare = pool.accStarkyPerShare;
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
         if (block.number > pool.lastRewardBlock && lpSupply != 0) {
-            uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-            uint256 starkyReward = multiplier.mul(starkyPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-            accStarkyPerShare = accStarkyPerShare.add(starkyReward.mul(1e12).div(lpSupply));
+            uint256 multiplier = getMultiplier(
+                pool.lastRewardBlock,
+                block.number
+            );
+            uint256 starkyReward = multiplier
+                .mul(starkyPerBlock)
+                .mul(pool.allocPoint)
+                .div(totalAllocPoint);
+            accStarkyPerShare = accStarkyPerShare.add(
+                starkyReward.mul(1e12).div(lpSupply)
+            );
         }
-        return user.amount.mul(accStarkyPerShare).div(1e12).sub(user.rewardDebt);
+        uint256 pending = user.amount.mul(accStarkyPerShare).div(1e12).sub(
+            user.rewardDebt
+        );
+        return pending.add(user.rewardLockedUp);
+    }
+
+    // View function to see if user can harvest STARKYs.
+    function canHarvest(uint256 _pid, address _user)
+        public
+        view
+        returns (bool)
+    {
+        UserInfo storage user = userInfo[_pid][_user];
+        return block.timestamp >= user.nextHarvestUntil;
     }
 
     // Update reward variables for all pools. Be careful of gas spending!
@@ -1375,26 +2129,54 @@ contract MasterChef is Ownable, ReentrancyGuard {
             return;
         }
         uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-        uint256 starkyReward = multiplier.mul(starkyPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-        starky.mint(devaddr, starkyReward.div(10));
+        uint256 starkyReward = multiplier
+            .mul(starkyPerBlock)
+            .mul(pool.allocPoint)
+            .div(totalAllocPoint);
+        starky.mint(devAddress, starkyReward.div(10));
         starky.mint(address(this), starkyReward);
-        pool.accStarkyPerShare = pool.accStarkyPerShare.add(starkyReward.mul(1e12).div(lpSupply));
+        pool.accStarkyPerShare = pool.accStarkyPerShare.add(
+            starkyReward.mul(1e12).div(lpSupply)
+        );
         pool.lastRewardBlock = block.number;
     }
 
     // Deposit LP tokens to MasterChef for STARKY allocation.
-    function deposit(uint256 _pid, uint256 _amount) public nonReentrant {
+    function deposit(
+        uint256 _pid,
+        uint256 _amount,
+        address _referrer
+    ) public nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         updatePool(_pid);
-        if (user.amount > 0) {
-            uint256 pending = user.amount.mul(pool.accStarkyPerShare).div(1e12).sub(user.rewardDebt);
-            if (pending > 0) {
-                safeStarkyTransfer(msg.sender, pending);
-            }
+        if (
+            _amount > 0 &&
+            address(starkyReferral) != address(0) &&
+            _referrer != address(0) &&
+            _referrer != msg.sender
+        ) {
+            starkyReferral.recordReferral(msg.sender, _referrer);
         }
+        payOrLockupPendingStarky(_pid);
         if (_amount > 0) {
-            pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
+            pool.lpToken.safeTransferFrom(
+                address(msg.sender),
+                address(this),
+                _amount
+            );
+            if (address(pool.lpToken) == address(starky)) {
+                uint256 transferTax = _amount.mul(starky.transferTaxRate()).div(
+                    10000
+                );
+                _amount = _amount.sub(transferTax);
+            } else if (tokenTaxRate(address(pool.lpToken)) > 0) {
+                // When the token in the liquidity is defitionary token
+                uint256 transferTax = _amount
+                    .mul(tokenTaxRate(address(pool.lpToken)))
+                    .div(10000);
+                _amount = _amount.sub(transferTax);
+            }
             if (pool.depositFeeBP > 0) {
                 uint256 depositFee = _amount.mul(pool.depositFeeBP).div(10000);
                 pool.lpToken.safeTransfer(feeAddress, depositFee);
@@ -1413,10 +2195,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[_pid][msg.sender];
         require(user.amount >= _amount, "withdraw: not good");
         updatePool(_pid);
-        uint256 pending = user.amount.mul(pool.accStarkyPerShare).div(1e12).sub(user.rewardDebt);
-        if (pending > 0) {
-            safeStarkyTransfer(msg.sender, pending);
-        }
+        payOrLockupPendingStarky(_pid);
         if (_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
@@ -1432,39 +2211,138 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 amount = user.amount;
         user.amount = 0;
         user.rewardDebt = 0;
+        user.rewardLockedUp = 0;
+        user.nextHarvestUntil = 0;
         pool.lpToken.safeTransfer(address(msg.sender), amount);
         emit EmergencyWithdraw(msg.sender, _pid, amount);
+    }
+
+    // Pay or lockup pending STARKYs.
+    function payOrLockupPendingStarky(uint256 _pid) internal {
+        PoolInfo storage pool = poolInfo[_pid];
+        UserInfo storage user = userInfo[_pid][msg.sender];
+
+        if (user.nextHarvestUntil == 0) {
+            user.nextHarvestUntil = block.timestamp.add(pool.harvestInterval);
+        }
+
+        uint256 pending = user.amount.mul(pool.accStarkyPerShare).div(1e12).sub(
+            user.rewardDebt
+        );
+        if (canHarvest(_pid, msg.sender)) {
+            if (pending > 0 || user.rewardLockedUp > 0) {
+                uint256 totalRewards = pending.add(user.rewardLockedUp);
+
+                // reset lockup
+                totalLockedUpRewards = totalLockedUpRewards.sub(
+                    user.rewardLockedUp
+                );
+                user.rewardLockedUp = 0;
+                user.nextHarvestUntil = block.timestamp.add(
+                    pool.harvestInterval
+                );
+
+                // send rewards
+                safeStarkyTransfer(msg.sender, totalRewards);
+                payReferralCommission(msg.sender, totalRewards);
+            }
+        } else if (pending > 0) {
+            user.rewardLockedUp = user.rewardLockedUp.add(pending);
+            totalLockedUpRewards = totalLockedUpRewards.add(pending);
+            emit RewardLockedUp(msg.sender, _pid, pending);
+        }
     }
 
     // Safe starky transfer function, just in case if rounding error causes pool to not have enough STARKYs.
     function safeStarkyTransfer(address _to, uint256 _amount) internal {
         uint256 starkyBal = starky.balanceOf(address(this));
-        bool transferSuccess = false;
         if (_amount > starkyBal) {
-            transferSuccess = starky.transfer(_to, starkyBal);
+            starky.transfer(_to, starkyBal);
         } else {
-            transferSuccess = starky.transfer(_to, _amount);
+            starky.transfer(_to, _amount);
         }
-        require(transferSuccess, "safeStarkyTransfer: transfer failed");
     }
 
     // Update dev address by the previous dev.
-    function dev(address _devaddr) public {
-        require(msg.sender == devaddr, "dev: wut?");
-        devaddr = _devaddr;
-        emit SetDevAddress(msg.sender, _devaddr);
+    function setDevAddress(address _devAddress) public {
+        require(msg.sender == devAddress, "setDevAddress: FORBIDDEN");
+        require(_devAddress != address(0), "setDevAddress: ZERO");
+        devAddress = _devAddress;
     }
 
     function setFeeAddress(address _feeAddress) public {
         require(msg.sender == feeAddress, "setFeeAddress: FORBIDDEN");
+        require(_feeAddress != address(0), "setFeeAddress: ZERO");
         feeAddress = _feeAddress;
-        emit SetFeeAddress(msg.sender, _feeAddress);
     }
 
-    //Pancake has to add hidden dummy pools inorder to alter the emission, here we make it simple and transparent to all.
+    /**
+     * @dev Returns the tax rate of the token address.
+     */
+    function tokenTaxRate(address _address) public view returns (uint16) {
+        return _taxableTokens[_address];
+    }
+
+    /**
+     * @dev Set tax rate of token.
+     * Can only be called by the owner.
+     */
+    function setTokenTaxRate(address _address, uint16 _taxRate)
+        public
+        onlyOwner
+    {
+        require(
+            _taxRate <= MAXIMUM_TAX_RATE,
+            "setTokenTaxRate:: Out of maximum limit"
+        );
+        _taxableTokens[_address] = _taxRate;
+    }
+
+    // Pancake has to add hidden dummy pools in order to alter the emission, here we make it simple and transparent to all.
     function updateEmissionRate(uint256 _starkyPerBlock) public onlyOwner {
         massUpdatePools();
+        emit EmissionRateUpdated(msg.sender, starkyPerBlock, _starkyPerBlock);
         starkyPerBlock = _starkyPerBlock;
-        emit UpdateEmissionRate(msg.sender, _starkyPerBlock);
+    }
+
+    // Update the starky referral contract address by the owner
+    function setStarkyReferral(IStarkyReferral _starkyReferral)
+        public
+        onlyOwner
+    {
+        starkyReferral = _starkyReferral;
+    }
+
+    // Update referral commission rate by the owner
+    function setReferralCommissionRate(uint16 _referralCommissionRate)
+        public
+        onlyOwner
+    {
+        require(
+            _referralCommissionRate <= MAXIMUM_REFERRAL_COMMISSION_RATE,
+            "setReferralCommissionRate: invalid referral commission rate basis points"
+        );
+        referralCommissionRate = _referralCommissionRate;
+    }
+
+    // Pay referral commission to the referrer who referred this user.
+    function payReferralCommission(address _user, uint256 _pending) internal {
+        if (
+            address(starkyReferral) != address(0) && referralCommissionRate > 0
+        ) {
+            address referrer = starkyReferral.getReferrer(_user);
+            uint256 commissionAmount = _pending.mul(referralCommissionRate).div(
+                10000
+            );
+
+            if (referrer != address(0) && commissionAmount > 0) {
+                starky.mint(referrer, commissionAmount);
+                starkyReferral.recordReferralCommission(
+                    referrer,
+                    commissionAmount
+                );
+                emit ReferralCommissionPaid(_user, referrer, commissionAmount);
+            }
+        }
     }
 }
